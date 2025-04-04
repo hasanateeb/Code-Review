@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Code Analysis Results</title>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" />
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Fira Code', monospace;
+      display: flex;
+      height: 100vh;
+      background-color: #f2f2f2;
+    }
+
+    .left-panel, .right-panel {
+      padding: 20px;
+      overflow-y: auto;
+    }
+
+    .left-panel {
+      width: 50%;
+      background-color: #1e1e1e;
+      color: #fff;
+      border-right: 2px solid #333;
+    }
+
+    .left-panel pre {
+      font-size: 14px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+    }
+
+    .highlight-error {
+      background-color: rgba(255, 0, 0, 0.2);
+    }
+
+    .highlight-warning {
+      background-color: rgba(255, 255, 0, 0.2);
+    }
+
+    .right-panel {
+      width: 50%;
+      background-color: #fff;
+    }
+
+    .result-item {
+      padding: 10px;
+      margin-bottom: 10px;
+      border-left: 5px solid #00b894;
+      background-color: #f9f9f9;
+    }
+
+    .result-item.bad {
+      border-color: #d63031;
+      background-color: #ffe8e8;
+    }
+
+    .tag {
+      display: inline-block;
+      background-color: #00b894;
+      color: white;
+      padding: 3px 6px;
+      border-radius: 4px;
+      font-size: 12px;
+      margin-left: 8px;
+    }
+
+    .bad .tag {
+      background-color: #d63031;
+    }
+
+    .controls {
+      margin: 20px 0;
+    }
+
+    button {
+      margin-right: 10px;
+      padding: 8px 16px;
+      border: none;
+      background-color: #00b894;
+      color: #fff;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background-color: #009874;
+    }
+
+    .section {
+      margin-top: 20px;
+    }
+
+    .chart-container {
+      width: 100%;
+      max-width: 400px;
+      margin-top: 20px;
+    }
+
+    ul {
+      padding-left: 20px;
+    }
+
+    li {
+      margin-bottom: 6px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="left-panel">
+    <h2>📄 Uploaded Code</h2>
+    <pre><code class="language-python" id="code-block"></code></pre>
+  </div>
+
+  <div class="right-panel">
+    <h2>✅ Code Review Summary</h2>
+
+    <div class="result-item {{ 'bad' if quality_codebert == 'Bad' }}">
+      <strong>CodeBERT:</strong> {{ quality_codebert }}
+      <span class="tag">Confidence: {{ confidence }}%</span>
+    </div>
+
+    <div class="result-item {{ 'bad' if quality_log_reg == 'Bad' }}">
+      <strong>Logistic Regression:</strong> {{ quality_log_reg }}
+    </div>
+
+    <div class="result-item">
+      <strong>Errors:</strong> {{ errors }} |
+      <strong>Warnings:</strong> {{ warnings }} |
+      <strong>Conventions:</strong> {{ conventions }}
+    </div>
+
+    <div class="controls">
+      <button onclick="window.location.href='/'">⬅ Go Back</button>
+      <button onclick="downloadCode()">⬇ Download Code</button>
+      <button onclick="toggleSection('error-section')">Toggle Errors</button>
+      <button onclick="toggleSection('warning-section')">Toggle Warnings</button>
+      <button onclick="toggleSection('convention-section')">Toggle Conventions</button>
+    </div>
+
+    <div class="chart-container">
+      <canvas id="resultChart"></canvas>
+    </div>
+
+    <div class="section" id="error-section">
+      <h3>❌ Errors</h3>
+      <ul>
+        {% for err in error_details %}
+        <li>Line {{ err.line }}: {{ err.message }} <span class="tag">{{ err.code }}</span></li>
+        {% endfor %}
+      </ul>
+    </div>
+
+    <div class="section" id="warning-section">
+      <h3>⚠️ Warnings</h3>
+      <ul>
+        {% for warn in warning_details %}
+        <li>Line {{ warn.line }}: {{ warn.message }} <span class="tag">{{ warn.code }}</span></li>
+        {% endfor %}
+      </ul>
+    </div>
+
+    <div class="section" id="convention-section">
+      <h3>📎 Convention Notes</h3>
+      <ul>
+        {% for conv in convention_details %}
+        <li>Line {{ conv.line }}: {{ conv.message }} <span class="tag">{{ conv.code }}</span></li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+
+  <!-- JS Includes -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    const code = `{{ code | replace('\\n', '\\n') | replace('"', '\\"') }}`;
+    const errorLines = [{% for err in error_details %}{{ err.line }},{% endfor %}];
+    const warningLines = [{% for warn in warning_details %}{{ warn.line }},{% endfor %}];
+
+    const codeLines = code.split('\\n');
+    const codeBlock = document.getElementById("code-block");
+
+    codeLines.forEach((line, index) => {
+      const lineNumber = index + 1;
+      let span = document.createElement("span");
+
+      if (errorLines.includes(lineNumber)) {
+        span.className = "highlight-error";
+      } else if (warningLines.includes(lineNumber)) {
+        span.className = "highlight-warning";
+      }
+
+      span.textContent = line + "\\n";
+      codeBlock.appendChild(span);
+    });
+
+    Prism.highlightElement(codeBlock);
+
+    function downloadCode() {
+      const blob = new Blob([`{{ code }}`], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = "analyzed_code.py";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    function toggleSection(id) {
+      const section = document.getElementById(id);
+      section.style.display = section.style.display === "none" ? "block" : "none";
+    }
+
+    // Render Chart
+    new Chart(document.getElementById('resultChart'), {
+      type: 'doughnut',
+      data: {
+        labels: ['Errors', 'Warnings', 'Conventions'],
+        datasets: [{
+          data: [{{ errors }}, {{ warnings }}, {{ conventions }}],
+          backgroundColor: ['#d63031', '#fdcb6e', '#00cec9']
+        }]
+      },
+      options: {
+        plugins: {
+          legend: { position: 'bottom' }
+        }
+      }
+    });
+  </script>
+</body>
+</html>
